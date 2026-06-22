@@ -414,11 +414,25 @@ python run_daily.py --strategy lstm --train
 
 ### Cron 配置
 
+018 项目已集成到 **Sequoia-X 全自动管线**，由 `004_sequoia-x/pipeline/pipeline.py` 统一编排，不再需要独立 cron 条目。
+
+管线 18:10 启动，依次执行：
+1. 数据同步（004）
+2. 策略选股+LLM（004）
+3. **018 LSTM 策略** ← 在这里
+4. **018 指标策略** ← 在这里
+
+```cron
+# 唯一入口（已包含 018 两个子步骤）
+10 18 * * 1-5 cd /public/home/hpc/zhulei/superman/quant/code/017_workbuddy/004_sequoia-x \
+  && /home/zhulei/anaconda3/envs/zhulei_py312/bin/python pipeline/pipeline.py \
+  >> logs/pipeline_$(date +\%Y\%m\%d).log 2>&1
+```
+
+如需要独立运行（调试/手动），仍可直接调用：
 ```bash
-# 交易日 21:10 运行（与 016 错开）
-10 21 * * 1-5 cd /public/home/hpc/zhulei/superman/quant/code/018_unified_trading && \
-  /home/zhulei/anaconda3/envs/zhulei/bin/python run_daily.py \
-  >> logs/daily_$(date +\%Y\%m\%d).log 2>&1
+python run_daily.py --strategy lstm
+python run_daily.py --strategy indicator
 ```
 
 切换默认策略只需改 `config/config.py`：
