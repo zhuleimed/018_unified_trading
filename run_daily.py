@@ -17,7 +17,7 @@ import sys
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_DIR)
 
-from config.config import ensure_dirs, STATE_FILE, OUTPUT_DIR, DEFAULT_STRATEGY
+from config.config import ensure_dirs, STATE_FILE, OUTPUT_DIR, DEFAULT_STRATEGY, get_state_file
 from core.state_manager import StateManager
 from core.simulator import Simulator
 from core.notification import push_daily_report, push_error
@@ -102,19 +102,19 @@ def _cleanup_lock():
         pass
 
 
-def _resolve_strategy(name: str):
+def _resolve_strategy(name: str, state_manager: StateManager):
     """按名称解析策略实例。"""
     s = get_strategy(name)
     logger.info(f'策略: {s.name}')
 
     # 策略特有的初始化
     if name == 'indicator':
-        s.attach_state(StateManager(STATE_FILE))
+        s.attach_state(state_manager)  # 让策略能读写 scan 时间
         from config.config import RESCAN_DAYS
-        if s._state_manager.needs_retrain('scan_check', RESCAN_DAYS):
+        if state_manager.needs_retrain('scan_check', RESCAN_DAYS):
             logger.info('指标过期，开始重新扫描…')
             if s.on_rescan():
-                s._state_manager.set_model_trained('scan_check')
+                state_manager.set_model_trained('scan_check')
                 logger.info('扫描完成')
             else:
                 logger.warning('扫描失败')
@@ -152,12 +152,14 @@ def main():
         _cleanup_lock()
         return
 
-    state = StateManager(STATE_FILE)
+    # 每个策略独立状态文件（互不干扰）
+    strategy_state_file = get_state_file(args.strategy)
+    state = StateManager(strategy_state_file)
     simulator = Simulator()
 
     # 解析策略
     try:
-        strategy = _resolve_strategy(args.strategy)
+        strategy = _resolve_strategy(args.strategy, state)
     except Exception as e:
         logger.error(f'策略初始化失败: {e}')
         _cleanup_lock()

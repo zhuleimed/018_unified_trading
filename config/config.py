@@ -16,7 +16,18 @@ CODE_DIR = os.path.dirname(PROJECT_DIR)
 OUTPUT_DIR = os.path.join(PROJECT_DIR, 'output')
 MODEL_DIR = os.path.join(OUTPUT_DIR, 'models')
 LOG_DIR = os.path.join(PROJECT_DIR, 'logs')
-STATE_FILE = os.path.join(OUTPUT_DIR, 'state.json')
+STATE_FILE = os.path.join(OUTPUT_DIR, 'state.json')  # 默认（兼容）
+
+
+def get_state_file(strategy_name: str) -> str:
+    """
+    按策略名获取独立状态文件路径。
+
+    每个策略独立持仓/资金/交易记录，互不干扰。
+    例: state_indicator.json, state_lstm.json, state_my.json
+    """
+    safe_name = strategy_name.replace('/', '_').replace('\\', '_')
+    return os.path.join(OUTPUT_DIR, f'state_{safe_name}.json')
 
 # ============================================================================
 # 资金与交易成本（全局默认 — 偏 A 股股票）

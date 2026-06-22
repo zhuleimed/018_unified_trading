@@ -370,6 +370,26 @@ python run_daily.py --dry-run
 python run_daily.py --strategy lstm --dry-run
 ```
 
+### 多策略独立运行
+
+每个策略有**独立的 state 文件**，持仓/资金/交易记录互不干扰：
+
+```
+output/
+├── state_indicator.json   ← indicator 策略的状态（独立运行）
+└── state_lstm.json        ← lstm 策略的状态（独立运行）
+```
+
+可以在不同 cron 时间分别运行不同策略，互不影响：
+
+```bash
+# cron 配置示例：不同时间跑不同策略
+# 21:10 跑 indicator 策略
+10 21 * * 1-5 cd ... && python run_daily.py --strategy indicator
+# 21:30 跑 lstm 策略
+30 21 * * 1-5 cd ... && python run_daily.py --strategy lstm
+```
+
 ### 训练/扫描
 
 ```bash
