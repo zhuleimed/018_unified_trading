@@ -1,38 +1,15 @@
 """
-LSTM 策略 — 继承 016_etf_lstm_predict 的深度学习预测体系。
+LSTM 策略 — 用 LSTM-Transformer 模型预测 ETF 次日涨跌幅。
 
-用 LSTM 模型预测 ETF 次日涨跌幅，以阈值过滤生成买卖信号。
-
-依赖：016_etf_lstm_predict 项目（model/ 目录）
+模型代码已完整移植到 018 的 model/ 目录，无外部依赖。
 """
 
-import sys
-import os
 from datetime import date
 from typing import Dict, List, Optional
 
 import pandas as pd
 
 from strategies.base import BaseStrategy
-
-# 依赖 016 项目的模型代码
-# 用 importlib 预注册 config.etf_config，避免 018 的 config/ 包名冲突
-_016_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        '..', '016_etf_lstm_predict')
-_016_DIR = os.path.abspath(_016_DIR)
-
-import importlib.util
-_etf_config_path = os.path.join(_016_DIR, 'config', 'etf_config.py')
-if os.path.exists(_etf_config_path):
-    spec = importlib.util.spec_from_file_location('config.etf_config', _etf_config_path)
-    _mod = importlib.util.module_from_spec(spec)
-    sys.modules['config.etf_config'] = _mod
-    spec.loader.exec_module(_mod)
-
-# 临时插入路径用于 016 内部跨模块引用
-if _016_DIR not in sys.path:
-    sys.path.insert(0, _016_DIR)
-
 from model.lstm_transformer_predictor import LSTMTransformerPredictor
 from model.feature_engineer import compute_features
 
