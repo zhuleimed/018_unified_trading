@@ -1,27 +1,15 @@
 """
-动态指标策略 — 继承 015_indicator_scanner 的指标动态选优体系。
+动态指标策略 — 从 97 个技术指标中动态选出最佳指标，用于每日信号生成。
 
-从 97 个技术指标中动态选出最佳指标，用于每日信号生成。
-
-依赖：015_indicator_scanner 项目（signals/ 目录）
+信号代码（signals/ 目录）已完整移植到本项目，无外部依赖。
 """
 
-import sys
-import os
 from datetime import date, datetime
 from typing import Dict, List, Optional
 
 import pandas as pd
 
 from strategies.base import BaseStrategy
-
-# 依赖 015 项目的信号代码（追加到末尾，018 自身 core/ 优先）
-_015_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        '..', '015_indicator_scanner')
-_015_DIR = os.path.abspath(_015_DIR)
-if _015_DIR not in sys.path:
-    sys.path.append(_015_DIR)
-
 from signals.gf import GFSignal
 from core.signal_engine import SignalEngine
 
