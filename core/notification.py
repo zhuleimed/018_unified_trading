@@ -34,6 +34,11 @@ def push_daily_report(summary: Dict[str, Any]):
     if summary.get('dry_run'):
         lines.append('⚠ DRY RUN 模式')
 
+    if summary.get('no_targets'):
+        lines.append('')
+        lines.append('⚠ 策略今日未选出交易标的，无操作')
+        lines.append('')
+
     # 操作
     trades = summary.get('trades_today', [])
     lines.append('')
@@ -104,9 +109,15 @@ def push_daily_report(summary: Dict[str, Any]):
 
     lines.append('')
     lines.append('── 信号状态 ──')
+    held_symbols = {p['symbol'] for p in summary.get('positions', [])}
     for sym, sig in summary.get('signal_details', {}).items():
-        labels = {1: '🟢 买入', -1: '🔴 卖出', 0: '⚪ 持有'}
-        lines.append(f'  {labels.get(sig, "❓")} {sym}')
+        if sig == 1:
+            label = '🟢 买入' if sym not in held_symbols else '🟢 加仓'
+        elif sig == -1:
+            label = '🔴 卖出' if sym in held_symbols else '⚪ 观望'
+        else:
+            label = '⚪ 持有'
+        lines.append(f'  {label} {sym}')
 
     _send('\n'.join(lines))
 

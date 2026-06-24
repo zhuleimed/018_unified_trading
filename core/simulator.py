@@ -93,9 +93,33 @@ class Simulator:
         # ---- 2. 获取策略配置 & 标的 ----
         cfg = strategy.get_config(_GLOBAL_CONFIG)
         target_symbols = strategy.get_target_symbols()
+
+        # 提前读取持仓（无标的时也需要用于构建摘要推送）
+        pf = state_manager.portfolio
+        cash = pf.get('cash', INITIAL_CAPITAL)
+        positions = dict(pf.get('positions', {}))
+        pending_orders = dict(pf.get('pending_orders', {}))
+        initial_capital = pf.get('initial_capital', INITIAL_CAPITAL)
+
         if not target_symbols:
             logger.warning('策略未返回交易标的')
-            return None
+            pv = pf.get('_last_portfolio_value') or calculate_portfolio_value(cash, positions, {})
+            return {
+                'date': today_str,
+                'strategy': strategy.name,
+                'trades_today': [],
+                'positions': build_position_details(positions, {}),
+                'cash': round(cash, 2),
+                'portfolio_value': round(pv, 2),
+                'initial_capital': initial_capital,
+                'cumulative_return': round(calculate_return(pv, initial_capital), 4),
+                'benchmark_return': None,
+                'excess_return': None,
+                'pending_orders': pending_orders,
+                'signal_details': {},
+                'dry_run': dry_run,
+                'no_targets': True,
+            }
 
         logger.info(f'  策略: {strategy.name}')
         logger.info(f'  标的: {len(target_symbols)} 只')
@@ -356,10 +380,16 @@ class Simulator:
             print(f'    超额收益: {summary["excess_return"]:+.2%}')
 
         if summary.get('signal_details'):
+            held_symbols = {p['symbol'] for p in summary.get('positions', [])}
             print(f'\n  信号状态:')
-            labels = {1: '🟢 买入', -1: '🔴 卖出', 0: '⚪ 持有'}
             for sym, sig in summary['signal_details'].items():
-                print(f'    {labels.get(sig, "❓")} {sym} (sig={sig})')
+                if sig == 1:
+                    label = '🟢 买入' if sym not in held_symbols else '🟢 加仓'
+                elif sig == -1:
+                    label = '🔴 卖出' if sym in held_symbols else '⚪ 观望'
+                else:
+                    label = '⚪ 持有'
+                print(f'    {label} {sym} (sig={sig})')
 
         if summary.get('pending_orders'):
             active = {s: a for s, a in summary['pending_orders'].items()

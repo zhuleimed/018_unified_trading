@@ -30,7 +30,7 @@ class DynamicIndicatorStrategy(BaseStrategy):
     config_overrides = {
         'RESCAN_DAYS': 90,
         'SCAN_YEARS': 2,
-        'TOP_N': 10,
+        'TOP_N': 20,              # 放宽至 20 只（原 10 只）
     }
 
     def __init__(self):
@@ -44,8 +44,13 @@ class DynamicIndicatorStrategy(BaseStrategy):
         return f'DynamicIndicator({self._indicator})' if self._indicator else 'DynamicIndicator'
 
     def attach_state(self, state_manager) -> None:
-        """注入状态管理器（用于读取/写入扫描时间）。"""
+        """注入状态管理器，并加载持久化的扫描结果。"""
         self._state_manager = state_manager
+        meta = state_manager.data.get('strategy_meta', {})
+        if meta.get('indicator'):
+            self._indicator = meta['indicator']
+        if meta.get('target_symbols'):
+            self.target_symbols = meta['target_symbols']
 
     def generate(self, symbol: str, df: pd.DataFrame) -> int:
         """用当前选定的最佳指标生成信号。"""
@@ -73,23 +78,31 @@ class DynamicIndicatorStrategy(BaseStrategy):
 
     @staticmethod
     def _fetch_constituents() -> List[str]:
-        """从 baostock 获取沪深300成分股。"""
+        """从 baostock 获取沪深300 + 中证500 成分股（合并去重）。"""
         import baostock as bs
         lg = bs.login()
         if lg.error_code != '0':
             return []
         try:
-            rs = bs.query_hs300_stocks()
-            if rs.error_code != '0':
-                return []
-            codes = []
-            while rs.next():
-                row = rs.get_row_data()
-                # row = [日期, sh.600000, 名称]
-                code = row[1].split('.')[1] if '.' in row[1] else row[1]
-                codes.append(code)
-            return codes
-        except Exception:
+            all_codes: set[str] = set()
+            for query_fn, label in [
+                (bs.query_hs300_stocks, "沪深300"),
+                (bs.query_zz500_stocks, "中证500"),
+            ]:
+                rs = query_fn()
+                if rs.error_code == '0':
+                    count = 0
+                    while rs.next():
+                        row = rs.get_row_data()
+                        code = row[1].split('.')[1] if '.' in row[1] else row[1]
+                        all_codes.add(code)
+                        count += 1
+                    print(f'  {label}: {count} 只')
+                else:
+                    print(f'  ⚠ {label} 获取失败: {rs.error_code}')
+            return sorted(all_codes)
+        except Exception as e:
+            print(f'  ⚠ _fetch_constituents 异常: {e}')
             return []
         finally:
             bs.logout()
@@ -202,9 +215,12 @@ class DynamicIndicatorStrategy(BaseStrategy):
         self.target_symbols = top_stocks
         print(f'  📋 选股结果: {top_stocks}')
 
-        # 更新扫描时间
-        self._last_scan_date = today
+        # 持久化扫描结果（indicator + target_symbols 写入状态文件）
         if self._state_manager:
+            self._state_manager.data['strategy_meta'] = {
+                'indicator': self._indicator,
+                'target_symbols': self.target_symbols,
+            }
             self._state_manager.set_model_trained(f'scan_{today.isoformat()}')
 
         print(f'  ✅ 扫描完成')
