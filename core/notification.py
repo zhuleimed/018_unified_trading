@@ -114,7 +114,7 @@ def push_daily_report(summary: Dict[str, Any]):
         if sig == 1:
             label = '🟢 买入' if sym not in held_symbols else '🟢 加仓'
         elif sig == -1:
-            label = '🔴 卖出' if sym in held_symbols else '⚪ 观望'
+            label = '🔴 卖出'  # 仅持仓股才会出现卖出信号（空仓卖出→持有）
         else:
             label = '⚪ 持有'
         lines.append(f'  {label} {sym}')

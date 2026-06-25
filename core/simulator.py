@@ -195,11 +195,18 @@ class Simulator:
             if sym not in stock_data:
                 continue
             sig = strategy.generate(sym, stock_data[sym]['df'])
-            signal_details[sym] = sig
 
-            if sig == 1 and sym not in positions:
+            # 有效信号：空仓时卖出信号视为持有（无股可卖）
+            if sig == -1 and sym not in positions:
+                effective_sig = 0
+            else:
+                effective_sig = sig
+
+            signal_details[sym] = effective_sig
+
+            if effective_sig == 1 and sym not in positions:
                 new_pending[sym] = 'buy'
-            elif sig == -1 and sym in positions:
+            elif effective_sig == -1 and sym in positions:
                 new_pending[sym] = 'sell'
             else:
                 new_pending[sym] = 'hold'
@@ -387,7 +394,7 @@ class Simulator:
                 if sig == 1:
                     label = '🟢 买入' if sym not in held_symbols else '🟢 加仓'
                 elif sig == -1:
-                    label = '🔴 卖出' if sym in held_symbols else '⚪ 观望'
+                    label = '🔴 卖出'  # 仅持仓股会出现卖出信号
                 else:
                     label = '⚪ 持有'
                 print(f'    {label} {sym} (sig={sig})')
