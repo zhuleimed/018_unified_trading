@@ -239,11 +239,7 @@ class Simulator:
             state_manager.update_portfolio(
                 cash, positions, new_pending, portfolio_value, strategy.name,
             )
-            # 记录基准起始价
-            if state_manager.get_benchmark_start_price() == 0.0:
-                bench_price = self._get_benchmark_price(stock_data)
-                if bench_price:
-                    state_manager.set_benchmark_start_price(bench_price)
+            # 基准起始价已由 _calc_benchmark 在首次运行时设置
             for trade in trades_today:
                 state_manager.add_trade(trade)
             state_manager.save()
@@ -286,8 +282,9 @@ class Simulator:
                         stock_data: Dict) -> Optional[float]:
         """计算沪深300指数（sh.000300）基准收益。
 
-        基准从策略首次运行的日期开始算起（非库中最早数据），
-        后续每日取最新收盘价计算累计收益率，与策略持仓时间线对应。
+        基准从策略首次执行交易的日期开始，以当日**开盘价**为起始价，
+        与策略以开盘价买入/卖出的时间点一致。
+        后续每日取最新收盘价计算累计收益率：(今日收盘 - 首日开盘) / 首日开盘。
         """
         start_price = state_manager.get_benchmark_start_price()
         start_date = state_manager.data.get('benchmark_start_date', '')
@@ -296,7 +293,7 @@ class Simulator:
         try:
             df = self.loader.load_benchmark_data(
                 self._BENCHMARK_INDEX,
-                start_date=start_date,  # 从策略启动日加载，避免用历史数据
+                start_date=start_date,
             )
             if df is None or len(df) < 1:
                 return None
@@ -306,25 +303,19 @@ class Simulator:
             return None
 
         if start_price <= 0:
-            # 首次运行：记录启动日期，用当日收盘价作为基准起点
+            # 首次运行：以当日开盘价作为基准起点（与策略开盘执行一致）
             today_str = date.today().isoformat()
             today_data = df[df['date'].dt.strftime('%Y-%m-%d') == today_str]
             if today_data.empty:
-                # 今日非交易日或数据未同步，用最近可用收盘价
                 start_price = float(df['close'].iloc[-1])
             else:
-                start_price = float(today_data['close'].iloc[0])
+                start_price = float(today_data['open'].iloc[0])  # 用开盘价
             state_manager.set_benchmark_start_price(start_price)
             state_manager.data['benchmark_start_date'] = today_str
             state_manager.save()
 
         current = float(df['close'].iloc[-1])
         return calculate_benchmark_return(current, start_price)
-
-    @staticmethod
-    def _get_benchmark_price(stock_data: Dict) -> Optional[float]:
-        """获取基准起始价格。已被 _calc_benchmark 替代，保留兼容。"""
-        return None
 
     @staticmethod
     def _is_trading_day() -> bool:
