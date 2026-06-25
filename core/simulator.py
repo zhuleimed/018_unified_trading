@@ -279,50 +279,40 @@ class Simulator:
                 logger.warning(f'{sym}: 加载失败: {e}')
         return result
 
+    # 基准指数：沪深300指数（sh.000300），所有策略统一使用
+    _BENCHMARK_INDEX = 'sh.000300'
+
     def _calc_benchmark(self, state_manager: Any,
                         stock_data: Dict) -> Optional[float]:
-        """计算沪深300 ETF（510300）基准收益。
+        """计算沪深300指数（sh.000300）基准收益。
 
-        无论策略是否交易 510300，都会主动拉取其数据作为统一基准，
-        确保所有策略（LSTM/指标等）的基准收益口径一致。
+        通过 load_benchmark_data 从数据库 index_daily 表加载，
+        与策略交易标的是否含 ETF 无关，所有策略口径一致。
         """
-        from config.config import TRADING_ETF
-
-        # 从 stock_data 中取 510300 数据（ETF 策略已有），或主动加载
-        bench_data = stock_data.get(TRADING_ETF)
-        if bench_data is None:
-            try:
-                df = self.loader.load_etf_data(TRADING_ETF)
-                if df is not None and len(df) > 0:
-                    bench_data = {'df': df, 'latest': df.iloc[-1]}
-            except Exception as e:
-                logger.debug(f"_calc_benchmark: 加载 {TRADING_ETF} 失败: {e}")
-
-        if bench_data is None:
-            return None
-
         start_price = state_manager.get_benchmark_start_price()
-        if start_price <= 0:
-            df = bench_data.get('df')
-            if df is not None and len(df) > 0:
-                start_price = float(df['close'].iloc[0])
-                state_manager.set_benchmark_start_price(start_price)
-            else:
-                return None
 
-        current = bench_data['latest']['close']
-        if not current:
+        # 加载沪深300指数日线
+        try:
+            df = self.loader.load_benchmark_data(self._BENCHMARK_INDEX)
+            if df is None or len(df) < 2:
+                return None
+            # 确保按日期升序
+            df = df.sort_values('date')
+        except Exception as e:
+            logger.debug(f"_calc_benchmark: 加载基准指数失败: {e}")
             return None
 
+        if start_price <= 0:
+            # 首次运行：用第一条收盘价作为基准起点
+            start_price = float(df['close'].iloc[0])
+            state_manager.set_benchmark_start_price(start_price)
+
+        current = float(df['close'].iloc[-1])
         return calculate_benchmark_return(current, start_price)
 
     @staticmethod
     def _get_benchmark_price(stock_data: Dict) -> Optional[float]:
         """获取基准起始价格。已被 _calc_benchmark 替代，保留兼容。"""
-        from config.config import TRADING_ETF
-        df_data = stock_data.get(TRADING_ETF, {}).get('df')
-        if df_data is not None and len(df_data) > 0:
-            return float(df_data['close'].iloc[0])
         return None
 
     @staticmethod
