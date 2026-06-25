@@ -143,17 +143,9 @@ class Simulator:
         clear_today_opened_flag(positions)
         update_highest_prices(positions, prices)
 
-        # ---- 5b. 首次运行：空仓且无待处理订单，加载扫描时保存的初始信号 ----
-        # 初始信号由 dynamic_indicator.py 的 _run_scan_pipeline Phase 3 生成并持久化
-        if not pending_orders and not positions and target_symbols:
-            scan_pending = state_manager.data.get('strategy_meta', {}).get('initial_pending', {})
-            if scan_pending:
-                logger.info(f'首次运行：加载扫描时保存的初始信号 ({len(scan_pending)} 只)')
-                pending_orders = dict(scan_pending)
-            else:
-                logger.info('扫描时无买入信号，首日不交易')
-
         # ---- 6. 执行昨日待处理订单 ----
+        # 首次运行：pending_orders 为空 → 无交易，step 8 生成信号供次日执行
+        # 后续每日：执行昨日信号（开盘价）→ step 8 生成明日信号（收盘价）
         trades_today = []
         if pending_orders:
             for sym, action in list(pending_orders.items()):

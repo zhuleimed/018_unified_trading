@@ -215,35 +215,12 @@ class DynamicIndicatorStrategy(BaseStrategy):
         self.target_symbols = top_stocks
         print(f'  📋 选股结果: {top_stocks}')
 
-        # ── Phase 3: 生成初始信号，保存为待处理订单 ──
-        # 这些信号将在策略首次运行时以开盘价执行
-        # GFSignal / SignalEngine 已在模块顶部导入
-        initial_pending = {}
-        for code in top_stocks:
-            try:
-                df = loader.load_stock_data(code, end_date=end_date, min_days=30)
-                if df is None or len(df) < 10:
-                    continue
-                signal = GFSignal(indicator=self._indicator)
-                engine = SignalEngine()
-                engine.register(signal)
-                result = engine.generate(df.copy())
-                sig_col = 'GF_signal'
-                if sig_col in result.columns and int(result[sig_col].iloc[-1]) == 1:
-                    initial_pending[code] = 'buy'
-            except Exception:
-                continue
-        if initial_pending:
-            print(f'  📋 初始买入信号 ({len(initial_pending)} 只): {" ".join(initial_pending.keys())}')
-        else:
-            print(f'  📋 当前无买入信号，启动后首日不交易')
-
-        # 持久化扫描结果（indicator + target_symbols + initial_pending）
+        # 持久化扫描结果（indicator + target_symbols）
+        # 首次运行模拟盘时 step 8 会自动生成信号供第二天执行
         if self._state_manager:
             self._state_manager.data['strategy_meta'] = {
                 'indicator': self._indicator,
                 'target_symbols': self.target_symbols,
-                'initial_pending': initial_pending,
             }
             self._state_manager.set_model_trained(f'scan_{today.isoformat()}')
 
