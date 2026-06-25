@@ -286,26 +286,37 @@ class Simulator:
                         stock_data: Dict) -> Optional[float]:
         """计算沪深300指数（sh.000300）基准收益。
 
-        通过 load_benchmark_data 从数据库 index_daily 表加载，
-        与策略交易标的是否含 ETF 无关，所有策略口径一致。
+        基准从策略首次运行的日期开始算起（非库中最早数据），
+        后续每日取最新收盘价计算累计收益率，与策略持仓时间线对应。
         """
         start_price = state_manager.get_benchmark_start_price()
+        start_date = state_manager.data.get('benchmark_start_date', '')
 
         # 加载沪深300指数日线
         try:
-            df = self.loader.load_benchmark_data(self._BENCHMARK_INDEX)
-            if df is None or len(df) < 2:
+            df = self.loader.load_benchmark_data(
+                self._BENCHMARK_INDEX,
+                start_date=start_date,  # 从策略启动日加载，避免用历史数据
+            )
+            if df is None or len(df) < 1:
                 return None
-            # 确保按日期升序
             df = df.sort_values('date')
         except Exception as e:
             logger.debug(f"_calc_benchmark: 加载基准指数失败: {e}")
             return None
 
         if start_price <= 0:
-            # 首次运行：用第一条收盘价作为基准起点
-            start_price = float(df['close'].iloc[0])
+            # 首次运行：记录启动日期，用当日收盘价作为基准起点
+            today_str = date.today().isoformat()
+            today_data = df[df['date'].dt.strftime('%Y-%m-%d') == today_str]
+            if today_data.empty:
+                # 今日非交易日或数据未同步，用最近可用收盘价
+                start_price = float(df['close'].iloc[-1])
+            else:
+                start_price = float(today_data['close'].iloc[0])
             state_manager.set_benchmark_start_price(start_price)
+            state_manager.data['benchmark_start_date'] = today_str
+            state_manager.save()
 
         current = float(df['close'].iloc[-1])
         return calculate_benchmark_return(current, start_price)
