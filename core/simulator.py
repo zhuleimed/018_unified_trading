@@ -281,22 +281,24 @@ class Simulator:
 
     def _calc_benchmark(self, state_manager: Any,
                         stock_data: Dict) -> Optional[float]:
-        """计算基准收益。"""
+        """计算基准收益（仅对持有 TRADING_ETF 标的的策略有效）。"""
+        from config.config import TRADING_ETF
+
+        # 非 ETF 策略（如指标策略交易 A 股）没有统一基准，跳过
+        if TRADING_ETF not in stock_data:
+            return None
+
         start_price = state_manager.get_benchmark_start_price()
         if start_price <= 0:
-            # 首次运行，取第一个标的的价格
-            for sym, data in stock_data.items():
-                start_price = data['latest']['close']
-                break
-            if start_price <= 0:
+            # 首次运行，取 TRADING_ETF 的第一条价格
+            df = stock_data[TRADING_ETF].get('df')
+            if df is not None and len(df) > 0:
+                start_price = float(df['close'].iloc[0])
+                state_manager.set_benchmark_start_price(start_price)
+            else:
                 return None
 
-        # 用 TRADING_ETF 或第一个标的最新价
-        from config.config import TRADING_ETF
-        target = TRADING_ETF if TRADING_ETF in stock_data else None
-        if not target:
-            target = next(iter(stock_data))
-        current = stock_data.get(target, {}).get('latest', {}).get('close')
+        current = stock_data[TRADING_ETF]['latest']['close']
         if not current:
             return None
 
@@ -304,15 +306,13 @@ class Simulator:
 
     @staticmethod
     def _get_benchmark_price(stock_data: Dict) -> Optional[float]:
-        """获取基准起始价格。"""
+        """获取基准起始价格（仅对持有 TRADING_ETF 标的的策略有效）。"""
         from config.config import TRADING_ETF
-        target = TRADING_ETF if TRADING_ETF in stock_data else None
-        if not target:
-            target = next(iter(stock_data))
-        data = stock_data.get(target, {})
-        df = data.get('df')
+
+        if TRADING_ETF not in stock_data:
+            return None
+        df = stock_data[TRADING_ETF].get('df')
         if df is not None and len(df) > 0:
-            # 取第一天的收盘价作为基准起点
             return float(df['close'].iloc[0])
         return None
 
