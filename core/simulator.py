@@ -281,24 +281,36 @@ class Simulator:
 
     def _calc_benchmark(self, state_manager: Any,
                         stock_data: Dict) -> Optional[float]:
-        """计算基准收益（仅对持有 TRADING_ETF 标的的策略有效）。"""
+        """计算沪深300 ETF（510300）基准收益。
+
+        无论策略是否交易 510300，都会主动拉取其数据作为统一基准，
+        确保所有策略（LSTM/指标等）的基准收益口径一致。
+        """
         from config.config import TRADING_ETF
 
-        # 非 ETF 策略（如指标策略交易 A 股）没有统一基准，跳过
-        if TRADING_ETF not in stock_data:
+        # 从 stock_data 中取 510300 数据（ETF 策略已有），或主动加载
+        bench_data = stock_data.get(TRADING_ETF)
+        if bench_data is None:
+            try:
+                df = self.loader.load_etf_data(TRADING_ETF)
+                if df is not None and len(df) > 0:
+                    bench_data = {'df': df, 'latest': df.iloc[-1]}
+            except Exception as e:
+                logger.debug(f"_calc_benchmark: 加载 {TRADING_ETF} 失败: {e}")
+
+        if bench_data is None:
             return None
 
         start_price = state_manager.get_benchmark_start_price()
         if start_price <= 0:
-            # 首次运行，取 TRADING_ETF 的第一条价格
-            df = stock_data[TRADING_ETF].get('df')
+            df = bench_data.get('df')
             if df is not None and len(df) > 0:
                 start_price = float(df['close'].iloc[0])
                 state_manager.set_benchmark_start_price(start_price)
             else:
                 return None
 
-        current = stock_data[TRADING_ETF]['latest']['close']
+        current = bench_data['latest']['close']
         if not current:
             return None
 
@@ -306,14 +318,11 @@ class Simulator:
 
     @staticmethod
     def _get_benchmark_price(stock_data: Dict) -> Optional[float]:
-        """获取基准起始价格（仅对持有 TRADING_ETF 标的的策略有效）。"""
+        """获取基准起始价格。已被 _calc_benchmark 替代，保留兼容。"""
         from config.config import TRADING_ETF
-
-        if TRADING_ETF not in stock_data:
-            return None
-        df = stock_data[TRADING_ETF].get('df')
-        if df is not None and len(df) > 0:
-            return float(df['close'].iloc[0])
+        df_data = stock_data.get(TRADING_ETF, {}).get('df')
+        if df_data is not None and len(df_data) > 0:
+            return float(df_data['close'].iloc[0])
         return None
 
     @staticmethod
